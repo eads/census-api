@@ -3,6 +3,11 @@ from fabric.contrib.files import *
 from fabric.context_managers import shell_env, prefix
 from fabric.colors import green
 
+DEFAULT_SQL_FILES = [
+    'http://census-backup.s3.amazonaws.com/acs/2008/acs2008_1yr/acs2008_1yr_backup.sql.gz',
+]
+METADATA_URL = 'https://raw.githubusercontent.com/censusreporter/census-table-metadata/master/precomputed/unified_metadata.csv'
+
 root_dir = '/home/www-data'
 code_dir = '%s/api_app' % root_dir
 virtualenv_name = 'api_venv'
@@ -210,3 +215,31 @@ def load_postgresql_data(releases=['acs2012_1yr', 'acs2012_3yr', 'acs2012_5yr', 
     sudo("psql -d census -c \"COPY public.census_tabulation_metadata FROM '/home/ubuntu/census-table-metadata/precomputed/unified_metadata.csv' WITH csv ENCODING 'utf8' HEADER;\"", user='postgres')
 
     print "THIS IS INCOMPLETE. I'm only loading a tabulation metadata for now."
+
+def local_create_database():
+    """ Create PostgreSQL `census` user and database locally """
+    cwd = os.path.dirname(os.path.realpath(__file__))
+    metadata_dir = os.path.join(cwd, 'census-table-metadata')
+    with settings(warn_only=True), shell_env(CENSUS_METADATA_DIR=metadata_dir):
+        local('psql -c "CREATE ROLE census WITH NOSUPERUSER LOGIN UNENCRYPTED PASSWORD \'censuspassword\';"')
+        local('dropdb census')
+        local('psql -c "CREATE DATABASE census WITH OWNER census;"')
+        local('git clone https://github.com/censusreporter/census-table-metadata.git')
+        local('psql -d census -f %s/census_metadata.sql' % metadata_dir)
+        #local('psql -d census -f %s/census_metadata_load.sql' % metadata_dir)
+        #local("psql -d census -c \"COPY public.census_tabulation_metadata FROM '%s/precomputed/unified_metadata.csv' WITH csv ENCODING 'utf8' HEADER;\"" % metadata_dir)
+        #for year in range(2007, 2014):
+            #for estimate in ['1','3','5']:
+                #local("psql -d census -c \"COPY acs%s_%syr.census_table_metadata FROM '%s/precomputed/acs%s_%syr/census_table_metadata.csv' WITH csv ENCODING 'utf8' HEADER;\"" % (year, estimate, metadata_dir, year, estimate))
+                #local("psql -d census -c \"COPY acs%s_%syr.census_column_metadata FROM '%s/precomputed/acs%s_%syr/census_column_metadata.csv' WITH csv ENCODING 'utf8' HEADER;\"" % (year, estimate, metadata_dir, year, estimate))
+
+def get_data(files=DEFAULT_SQL_FILES):
+    """ Get and load data from backups """
+    with settings(warn_only=True):
+        for url in files:
+            filename = url.split('/').pop()
+            gz_path = 'data/%s' % filename
+            path = gz_path[:-3]
+            local('curl -z %s %s -o %s' % (path, url, path))
+            local('gzcat %s > %s' % (gz_path, path))
+            local('psql -d census -f %s' % path)

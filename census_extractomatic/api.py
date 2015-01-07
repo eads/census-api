@@ -32,7 +32,7 @@ from validation import qwarg_validate, NonemptyString, FloatRange, StringList, B
 
 
 app = Flask(__name__)
-app.config.from_object(os.environ.get('EXTRACTOMATIC_CONFIG_MODULE', 'census_extractomatic.config.Development'))
+app.config.from_object(os.environ.get('EXTRACTOMATIC_CONFIG_MODULE', 'config.Development'))
 
 app.s3 = S3Connection()
 
@@ -47,6 +47,9 @@ allowed_acs = [
     'acs2013_1yr',
     'acs2013_3yr',
     'acs2013_5yr',
+    'acs2008_1yr',
+    'acs2008_3yr',
+    'acs2008_5yr',
 ]
 
 ACS_NAMES = {
